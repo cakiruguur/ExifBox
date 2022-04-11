@@ -1,0 +1,24 @@
+{
+  "name": "exifbox",
+  "version": "1.0.0",
+  "description": "Klasör karşılaştırma ve exif insert işlemi..",
+  "main": "app.js",
+  "scripts": {
+    "watch": "node app.js watchFolder watch",
+    "compare" : "node app.js withBuffer"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@colors/colors": "^1.5.0",
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^1.4.1",
+    "canvas": "^2.9.1",
+    "chokidar": "^3.5.3",
+    "exiftool-vendored": "^16.0.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "mime": "^3.0.0",
+    "prompt": "^1.2.2"
+  }
+}
