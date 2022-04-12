@@ -1,11 +1,7 @@
 const prompt = require("./src/utils/prompt");
 const ExifBox = require("./src/ExifBox");
-const { ffmpeg } = require("./src/utils/ffmpeg");
 
 async function app() {
-  // const file = "IMG_20211130_150014_583.webp";
-  // ffmpeg(file).output("yeni.jpg").run();
-  // return;
   switch (process.argv[2]) {
     case "watchFolder":
       try {
