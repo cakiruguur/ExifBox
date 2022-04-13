@@ -4,9 +4,8 @@ const { basename, parse, join } = require("path");
 const prompt = require("prompt");
 const fsp = require("fs/promises");
 const { getType } = require("mime");
-const color = require("@colors/colors");
-const { watchFolder } = require("./utils");
-const ExifService = require('./services/ExifService')
+const { watchFolder, log } = require("./utils");
+const ExifService = require("./services/ExifService");
 
 class ExifBox {
   #destF;
@@ -27,7 +26,7 @@ class ExifBox {
   get destFiles() {
     return (async () => {
       try {
-        console.log(`${color.white.bold(basename(this.destFolder))} ${color.italic("klasöründeki dosya verileri okunuyor...")}`);
+        log.boldTitle(basename(this.destFolder), "klasöründeki dosya verileri okunuyor...");
         const files = (await fsp.readdir(this.destFolder, { withFileTypes: true })).filter((file) => file.isFile());
         const destArray = [];
         for await (const { name: destfile } of files) {
@@ -50,7 +49,7 @@ class ExifBox {
   get sourceFiles() {
     return (async () => {
       try {
-        console.log(`${color.white.bold(basename(this.sourceFolder))} ${color.italic("klasöründeki dosya verileri okunuyor...")}`);
+        log.boldTitle(basename(this.sourceFolder), "klasöründeki dosya verileri okunuyor...");
         const files = (await fsp.readdir(this.sourceFolder, { withFileTypes: true })).filter((file) => file.isFile());
         const sourceArray = [];
         for await (const { name: sourcefile } of files) {
@@ -91,7 +90,6 @@ class ExifBox {
     if (!folder) {
       throw new Error("Lütfen bir klasör ismi giriniz");
     }
-    console.log(`${folder} klasörü izleniyor...`);
     watchFolder(folder).on("add", async (path, stats) => {
       try {
         const parsed = parse(path);
@@ -116,10 +114,10 @@ class ExifBox {
           let find = sourceFiles?.find((sourcefile) => sourcefile.base == destfile.base);
           await ExifService.insert(find);
         } else {
-          console.log(color.italic.red(`Kaynak klasörde ${destfile.base} dosyası bulunamadı`));
+          log.error(`Kaynak klasörde ${destfile.base} dosyası bulunamadı`);
         }
       }
-      if (this.fnameCount != 0) console.log(`İsmine bakılarak toplam ${this.fnameCount} dosya oluşturuldu`);
+      if (this.fnameCount != 0) log.done(`İsmine bakılarak toplam ${this.fnameCount} dosya oluşturuldu`);
     } catch (error) {
       return error;
     }
@@ -127,11 +125,10 @@ class ExifBox {
 
   async findBufferAndInsert() {
     try {
-      const destFiles = await this.destFiles;
-      const sourceFiles = await this.sourceFiles;
+      let destFiles = await this.destFiles;
+      let sourceFiles = await this.sourceFiles;
 
       const lefts = [];
-
       for await (const destfile of destFiles) {
         let find = sourceFiles?.find((sourcefile) => sourcefile.buf.compare(destfile.buf) === 0);
         if (find !== undefined) {
@@ -142,7 +139,8 @@ class ExifBox {
         }
       }
 
-      console.log(`Buffer compare yöntemiyle ${this.bufferCount} adet dosya oluşturuldu...`);
+      return;
+      log.done(`Buffer compare yöntemiyle ${this.bufferCount} adet dosya oluşturuldu...`);
 
       if (lefts.length != 0) {
         const { kalanSoru } = await prompt.get(this.#promptSchema.kalanSoru);
@@ -152,7 +150,9 @@ class ExifBox {
       }
       exiftool.end();
       exiftool.on("end", () => {
-        console.log("ExifBox kapandı");
+        destFiles = [];
+        sourceFiles = [];
+        log.info("ExifBox kapandı");
       });
     } catch (error) {
       return error;
@@ -179,9 +179,9 @@ class ExifBox {
       }
       writer.write("]");
       writer.end(() => {
-        console.log("stats.json yazma işlemi bitti");
+        log.info("stats.json yazma işlemi bitti");
       });
-      console.log(`${basename(sourcePath)} klasöründe stats.json dosyası oluşturuldu.`);
+      log.info(`${basename(sourcePath)} klasöründe stats.json dosyası oluşturuldu.`);
     } catch (error) {
       throw new Error(error);
     }

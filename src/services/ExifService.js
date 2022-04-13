@@ -1,11 +1,11 @@
 const { ExifTool, ExifDateTime } = require("exiftool-vendored");
 const ConvertService = require("./ConvertService");
-const color = require("@colors/colors");
 const sendError = require("../errors/errorHandler");
 const fsp = require("fs/promises");
-const { existsSync, readdirSync } = require("fs");
+const { existsSync } = require("fs");
 const { parse } = require("path");
 const prompt = require("prompt");
+const log = require('../utils/logger');
 
 class ExifService extends ExifTool {
   constructor() {
@@ -13,7 +13,7 @@ class ExifService extends ExifTool {
       taskRetries: 0,
     });
   }
-  async insert(file, exif) {
+  async insert(file, exif = null) {
     this.on("taskError", async (error, task) => {
       sendError(error, "ExifInsert");
       if (task.toString().startsWith("Write")) {
@@ -25,42 +25,26 @@ class ExifService extends ExifTool {
             },
           },
         });
-
-        if (again == "yes") {
-          const convert = new ConvertService();
-          const newExif = await this.setExif(file);
-          await convert.ffmpegToJpeg(file);
-          await this.insert(file, newExif);
-        } else {
-            console.log('Vazgeçildi...')
+        if (again != "yes" || again != "y") {
+          return console.log("Vazgeçildi...");
         }
+        const convert = new ConvertService();
+        const newExif = await this.setExif(file);
+        await convert.ffmpegToJpeg(file);
+        await this.insert(file, newExif);
       }
     });
     try {
       if (!file) throw new Error("Dosya gönderilmedi");
       if (!(file instanceof Object)) throw new Error("Gönderilen parametre bir obje değil");
-      const newExif = exif || (await this.setExif(file));
+      const newExif = exif ?? (await this.setExif(file));
       await ConvertService.organizer(file);
+      log.info('EXIF Yazılıyor...')
       await this.write(`${file.dir}/${file.base}`, newExif, ["-charset", "filename=utf8", "-fast", "-a"]);
-      console.log(color.italic.grey("EXIF Yazılıyor..."));
-      if (file.destFolder) {
-        await fsp.mkdir(`${file.destFolder}/new`, { recursive: true });
-        await fsp.rename(`${file.sourceFolder}/${file.base}`, `${file.destFolder}/new/${file.base}`);
-        await fsp.mkdir(`${file.sourceFolder}/original/${parse(file.destFolder).name}`, { recursive: true });
-        await fsp.rename(`${file.sourceFolder}/${file.base}_original`, `${file.sourceFolder}/original/${parse(file.destFolder).name}/${file.base}`);
-        if (existsSync(`${file.destFolder}/${file.base}`)) {
-          await fsp.unlink(`${file.destFolder}/${file.base}`);
-          console.log(color.italic.grey(`Hedef klasördeki ${file.base} dosyası silindi.`));
-        }
-      } else {
-        await fsp.mkdir(`${file.dir}/new`, { recursive: true });
-        await fsp.rename(`${file.dir}/${file.base}`, `${file.dir}/new/${file.name}${file.ext}`);
-        await fsp.mkdir(`${file.dir}/original`, { recursive: true });
-        await fsp.rename(`${file.dir}/${file.base}_original`, `${file.dir}/original/${file.name}${file.ext}`);
-      }
-      console.log(color.cyan(`Yeni ${file.base} dosyası başarıyla oluşturuldu`));
+      await this.fileMoves(file)
+      log.success(`Yeni ${file.base} dosyası başarıyla oluşturuldu`)
     } catch (error) {
-        if(!error.stack.includes('WriteTask')) sendError(error,'ExifInsert')
+      if (!error.stack.includes("WriteTask")) sendError(error, "ExifInsert");
     }
   }
 
@@ -82,18 +66,15 @@ class ExifService extends ExifTool {
           newExif[key] = load[key] || value;
         }
       } else if (load["MIMEType"].includes("video")) {
-        newExif.CreateDate = load["CreateDate"]?.rawValue || dateObject;
-        newExif.ModifyDate = load["CreateDate"]?.rawValue || dateObject;
-        newExif.TrackCreateDate = load["CreateDate"]?.rawValue || dateObject;
-        newExif.TrackModifyDate = load["CreateDate"]?.rawValue || dateObject;
-        newExif.MediaCreateDate = load["CreateDate"]?.rawValue || dateObject;
-        newExif.MediaModifyDate = load["CreateDate"]?.rawValue || dateObject;
-        newExif.ContentCreateDate = load["CreateDate"]?.rawValue || dateObject;
+        newExif.CreateDate = load["CreateDate"] || dateObject;
+        newExif.ModifyDate = load["CreateDate"] || dateObject;
+        newExif.FileModifyDate = load["CreateDate"] || dateObject;
+        newExif.ContentCreateDate = load["CreateDate"] || dateObject;
         for await (const [key, value] of Object.entries(exifConfig["VIDEO"])) {
           newExif[key] = load[key] || value;
         }
       } else {
-        throw new Error("Dosya tipi uygun değil!");
+        throw new Error(`Dosya tipi uygun değil! (${file.base})`);
       }
       file.MIMEType = load["MIMEType"];
       return newExif;
@@ -102,6 +83,27 @@ class ExifService extends ExifTool {
     }
   }
 
+  async fileMoves({dir, base, name, ext, destFolder}){
+    try {
+      if (!destFolder) {
+        await fsp.mkdir(`${dir}/new`, { recursive: true });
+        await fsp.rename(`${dir}/${base}`, `${dir}/new/${name}${ext}`);
+        await fsp.mkdir(`${dir}/original`, { recursive: true });
+        await fsp.rename(`${dir}/${base}_original`, `${dir}/original/${name}${ext}`);
+        return
+      }
+      await fsp.mkdir(`${destFolder}/new`, { recursive: true });
+      await fsp.rename(`${dir}/${base}`, `${destFolder}/new/${base}`);
+      await fsp.mkdir(`${dir}/original/${parse(destFolder).name}`, { recursive: true });
+      await fsp.rename(`${dir}/${base}_original`, `${dir}/original/${parse(destFolder).name}/${base}`);
+      if (existsSync(`${destFolder}/${base}`)) {
+        await fsp.unlink(`${destFolder}/${base}`);
+        log.info(`Hedef klasördeki ${base} dosyası silindi.`)
+      }
+    } catch (error) {
+      sendError(error,'FileMoves')
+    }
+  }
   helpers = {
     exifDateObject: (file) => {
       const regex = file.name.match(/^(IMG|VID)[-_](\d{8})[-_](\d{6}|WA)\w*/);

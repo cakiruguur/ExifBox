@@ -1,10 +1,9 @@
-const colors = require("@colors/colors");
-
+const {log} = require('../utils');
 function handler(error, module = null,exit = false) {
   if (arguments.length == 1) {
-    return console.error(colors.red(error));
+    return log.error(error);
   }
-  console.error(colors.red(`${module} ->`, error));
+  log.error(`${module} ->`, error);
   if(exit) process.exit(1)
 }
 

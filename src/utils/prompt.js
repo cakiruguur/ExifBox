@@ -1,5 +1,5 @@
 const path = require("path");
-const { readdir, existsSync } = require("fs");
+const { existsSync } = require("fs");
 const colors = require("@colors/colors");
 const prompt = require("prompt");
 prompt.message = colors.green.bold(">> ");
@@ -11,7 +11,7 @@ module.exports = async () => {
       properties: {
         dest: {
           description: colors.white("Hedef klasör"),
-          default : "asml",
+          default : "dest",
           required: true,
           message: colors.bgRed.white("Klasör adı girilmelidir"),
         },
@@ -27,7 +27,7 @@ module.exports = async () => {
       properties: {
         src: {
           description: colors.white("Kaynak klasör"),
-          default : "Fotolar2",
+          default : "src",
           required: true,
           message: colors.bgRed.white("Klasör adı girilmelidir"),
         },

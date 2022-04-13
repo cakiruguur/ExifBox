@@ -1,11 +1,10 @@
 const canvas = require("canvas");
-const ffmpeg = require("../utils/ffmpeg");
 const sharp = require("sharp");
 const fsp = require("fs/promises");
 const { parse } = require("path");
-const color = require("@colors/colors");
 const { existsSync } = require("fs");
 const sendError = require("../errors/errorHandler");
+const {log,ffmpeg} = require('../utils');
 
 class ConvertService {
   constructor(file) {
@@ -15,7 +14,7 @@ class ConvertService {
     const service = new ConvertService();
     const ext = file.ext.slice(1).toLowerCase()
     if (file.MIMEType.includes("image")) {
-      if (ext == 'webp' || ext == 'png') return await service.imageConvert({fileObj})
+      if (ext == 'webp' || ext == 'png') return await service.imageConvert({fileObj: file})
       if (ext == "bmp") return await service.ffmpegToJpeg(file);
     } else if (file.MIMEType.includes("video")) {
       if (file.MIMEType != "video/mp4") return await this.videoConvert(file);
@@ -32,7 +31,7 @@ class ConvertService {
       const buffer = img.toBuffer("image/jpeg");
       await fsp.writeFile(`${file.dir}/${file.name}_output.jpg`, buffer);
       await this.fileMoves(file, "jpg");
-      console.log(color.green(`Canvas ile ${file.base} dosyası oluşturuldu`));
+      log.success(`Canvas ile ${file.base} dosyası oluşturuldu`);
     } catch (error) {
       sendError(error.message, "CanvasImage");
     }
@@ -44,11 +43,11 @@ class ConvertService {
         .outputOptions(["-q:v", "1"])
         .output(`${file.dir}/${file.name}_output.jpg`)
         .on("start", (command) => {
-          console.log("Image dönüştürme başladı ->", command);
+          log.info("Image dönüştürme başladı ->", command)
         })
         .on("end", async () => {
           await this.fileMoves(file, "jpg");
-          console.log(color.green(`Ffmpeg ile ${file.base} dosyası oluşturuldu`));
+          log.success(`Ffmpeg ile ${file.base} dosyası oluşturuldu`)
           return resolve();
         })
         .on("error", (err) => {
@@ -64,7 +63,7 @@ class ConvertService {
         .outputOptions(outOptions)
         .output(`${file.dir}/${file.name}${outExt}`)
         .on("start", (command) => {
-          console.log("Video dönüştürme başladı ->", command);
+          log.info("Video dönüştürme başladı ->", command)
         })
         .on("end", async () => {
           await fsp.mkdir(`${file.dir}/original/${parse(file.destFolder).name}/otherMIME`, { recursive: true });
@@ -117,7 +116,7 @@ class ConvertService {
       const buffer = await sharp(file.buf).toFormat(format, { quality }).toBuffer();
       await fsp.writeFile(`${file.dir}/${file.name}_output.${format}`, buffer);
       await this.fileMoves(file,format)
-      console.log(`Sharp ile ${file.base} dosyası oluşturuldu`);
+      log.success(`Sharp ile ${file.base} dosyası oluşturuldu`)
     } catch (error) {
       sendError(error, "imageConvert");
     }
