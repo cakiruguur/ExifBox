@@ -1,6 +1,6 @@
 const { exiftool } = require("exiftool-vendored");
 const { createWriteStream, existsSync } = require("fs");
-const { basename, parse, join } = require("path");
+const { basename, parse, join, resolve } = require("path");
 const prompt = require("prompt");
 const fsp = require("fs/promises");
 const { getType } = require("mime");
@@ -23,14 +23,23 @@ class ExifBox {
   get sourceFolder() {
     return this.#srcF;
   }
+  async *getFiles(dir, subDir = false) {
+    const dirents = await fsp.readdir(dir, { withFileTypes: true });
+    for (const dirent of dirents) {
+      const res = resolve(dir, dirent.name);
+      if (dirent.isDirectory()) {
+        if(subDir) yield* this.getFiles(res, true);        
+      } else {
+        yield res;
+      }
+    }
+  }
   get destFiles() {
     return (async () => {
       try {
         log.boldTitle(basename(this.destFolder), "klasöründeki dosya verileri okunuyor...");
-        const files = (await fsp.readdir(this.destFolder, { withFileTypes: true })).filter((file) => file.isFile());
         const destArray = [];
-        for await (const { name: destfile } of files) {
-          const file = `${this.destFolder}/${destfile}`;
+        for await (const file of this.getFiles(this.destFolder)) {
           const parsed = parse(file);
           const destObj = {
             ...parsed,
@@ -50,10 +59,8 @@ class ExifBox {
     return (async () => {
       try {
         log.boldTitle(basename(this.sourceFolder), "klasöründeki dosya verileri okunuyor...");
-        const files = (await fsp.readdir(this.sourceFolder, { withFileTypes: true })).filter((file) => file.isFile());
         const sourceArray = [];
-        for await (const { name: sourcefile } of files) {
-          const file = `${this.sourceFolder}/${sourcefile}`;
+        for await (const file of this.getFiles(this.sourceFolder, true)) {
           const parsed = parse(file);
           const sourceObj = {
             ...parsed,
@@ -78,14 +85,6 @@ class ExifBox {
     })();
   }
 
-  static async singleFile(file) {
-    try {
-      await ExifService.insert(file);
-    } catch (error) {
-      return error;
-    }
-  }
-
   static watchFolder(folder) {
     if (!folder) {
       throw new Error("Lütfen bir klasör ismi giriniz");
@@ -99,10 +98,9 @@ class ExifBox {
           mtime: stats.mtime,
           buf: await fsp.readFile(path),
         };
-
         await ExifService.insert(fileObj);
       } catch (error) {
-        console.log(error.message);
+        console.log(error);
       }
     });
   }
@@ -139,7 +137,6 @@ class ExifBox {
         }
       }
 
-      return;
       log.done(`Buffer compare yöntemiyle ${this.bufferCount} adet dosya oluşturuldu...`);
 
       if (lefts.length != 0) {

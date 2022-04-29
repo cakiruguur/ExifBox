@@ -4,7 +4,7 @@ const fsp = require("fs/promises");
 const { parse } = require("path");
 const { existsSync } = require("fs");
 const sendError = require("../errors/errorHandler");
-const {log,ffmpeg} = require('../utils');
+const { log, ffmpeg } = require("../utils");
 
 class ConvertService {
   constructor(file) {
@@ -12,14 +12,14 @@ class ConvertService {
   }
   static async organizer(file) {
     const service = new ConvertService();
-    const ext = file.ext.slice(1).toLowerCase()
+    const ext = file.ext.slice(1).toLowerCase();
     if (file.MIMEType.includes("image")) {
-      if (ext == 'webp' || ext == 'png') return await service.imageConvert({fileObj: file})
+      if (ext == "webp" || ext == "png") return await service.imageConvert({ fileObj: file });
       if (ext == "bmp") return await service.ffmpegToJpeg(file);
     } else if (file.MIMEType.includes("video")) {
-      if (file.MIMEType != "video/mp4") return await this.videoConvert(file);
+      if (file.MIMEType != "video/mp4") return await service.videoConvert(file);
     } else {
-      sendError('Dosya tipi uygun değil', 'ConvertService', true)
+      sendError("Dosya tipi uygun değil", "ConvertService", true);
     }
   }
   async canvasImage(file) {
@@ -37,17 +37,17 @@ class ConvertService {
     }
   }
   ffmpegToJpeg(fileObj) {
-    const file = fileObj || this.file
+    const file = fileObj || this.file;
     return new Promise((resolve, reject) => {
       ffmpeg(`${file.dir}/${file.base}`)
         .outputOptions(["-q:v", "1"])
         .output(`${file.dir}/${file.name}_output.jpg`)
         .on("start", (command) => {
-          log.info("Image dönüştürme başladı ->", command)
+          log.info("Image dönüştürme başladı ->", command);
         })
         .on("end", async () => {
           await this.fileMoves(file, "jpg");
-          log.success(`Ffmpeg ile ${file.base} dosyası oluşturuldu`)
+          log.success(`Ffmpeg ile ${file.base} dosyası oluşturuldu`);
           return resolve();
         })
         .on("error", (err) => {
@@ -57,20 +57,21 @@ class ConvertService {
     });
   }
   videoConvert(file) {
+    const { outOptions, outExt } = this.videoFormatter(file.ext);
     return new Promise((resolve, reject) => {
-      const { outOptions, outExt } = this.videoFormatter(file.ext);
       ffmpeg(`${file.dir}/${file.base}`)
         .outputOptions(outOptions)
-        .output(`${file.dir}/${file.name}${outExt}`)
+        .output(`${file.dir}/${file.name}_output.${outExt}`)
         .on("start", (command) => {
-          log.info("Video dönüştürme başladı ->", command)
+          log.info("Video dönüştürme başladı ->", command);
         })
         .on("end", async () => {
-          await fsp.mkdir(`${file.dir}/original/${parse(file.destFolder).name}/otherMIME`, { recursive: true });
-          await fsp.rename(`${file.dir}/${file.base}`, `${file.dir}/original/${parse(file.destFolder).name}/otherMIME/${file.base}`);
-          if (existsSync(`${file.destFolder}/${file.base}`)) await fsp.unlink(`${file.destFolder}/${file.base}`);
-          file.base = `${file.name}${outExt}`;
-          file.ext = outExt;
+          // await fsp.mkdir(`${file.dir}/original/${parse(file.destFolder).name}/otherMIME`, { recursive: true });
+          // await fsp.rename(`${file.dir}/${file.base}`, `${file.dir}/original/${parse(file.destFolder).name}/otherMIME/${file.base}`);
+          // if (existsSync(`${file.destFolder}/${file.base}`)) await fsp.unlink(`${file.destFolder}/${file.base}`);
+          // file.base = `${file.name}${outExt}`;
+          // file.ext = outExt;
+          await this.fileMoves(file, outExt);
           return resolve();
         })
         .on("error", (err) => {
@@ -105,18 +106,35 @@ class ConvertService {
           outExt: ".mp4",
         };
         break;
+        return {
+          outOptions: ["-c:v", "copy", "-c:a", "copy"],
+          outExt: ".mov",
+        };
+        break;
+      case ".mpg":
+        return {
+          outOptions: [],
+          outExt: ".mp4",
+        };
+        break;
+      case ".mov":
+        return {
+          outOptions: ["-qscale", 0],
+          outExt: "mp4",
+        };
+        break;
       default:
         sendError("Desteklenmeyen dosya formatı", "videoFormatter");
         break;
     }
   }
   async imageConvert({ fileObj, format = "jpg", quality = 90 }) {
-    const file = fileObj || this.file
+    const file = fileObj || this.file;
     try {
       const buffer = await sharp(file.buf).toFormat(format, { quality }).toBuffer();
       await fsp.writeFile(`${file.dir}/${file.name}_output.${format}`, buffer);
-      await this.fileMoves(file,format)
-      log.success(`Sharp ile ${file.base} dosyası oluşturuldu`)
+      await this.fileMoves(file, format);
+      log.success(`Sharp ile ${file.base} dosyası oluşturuldu`);
     } catch (error) {
       sendError(error, "imageConvert");
     }

@@ -1,7 +1,13 @@
 const prompt = require("./src/utils/prompt");
 const ExifBox = require("./src/ExifBox");
+const {readdir} = require('fs/promises');
+const { resolve } = require('path');
+const { ffmpeg } = require("./src/utils");
 
 async function app() {
+  // const file = "DSCF3836.mov"
+  // ffmpeg(file).outputOptions(["-qscale", 0]).output('yeni.mp4').run()
+  // return
   switch (process.argv[2]) {
     case "watchFolder":
       try {

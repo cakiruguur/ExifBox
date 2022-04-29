@@ -5,7 +5,7 @@ const fsp = require("fs/promises");
 const { existsSync } = require("fs");
 const { parse } = require("path");
 const prompt = require("prompt");
-const log = require('../utils/logger');
+const log = require("../utils/logger");
 
 class ExifService extends ExifTool {
   constructor() {
@@ -14,9 +14,21 @@ class ExifService extends ExifTool {
     });
   }
   async insert(file, exif = null) {
-    this.on("taskError", async (error, task) => {
-      sendError(error, "ExifInsert");
-      if (task.toString().startsWith("Write")) {
+    try {
+      if (!file) throw new Error("Dosya gönderilmedi");
+      if (!(file instanceof Object)) throw new Error("Gönderilen parametre bir obje değil");
+      const newExif = exif ?? (await this.setExif(file));
+      await ConvertService.organizer(file);
+      log.info("EXIF Yazılıyor...");
+      await this.write(`${file.dir}/${file.base}`, newExif, ["-charset", "filename=utf8", "-fast", "-a"]);
+      await this.fileMoves(file);
+      log.success(`Yeni ${file.base} dosyası başarıyla oluşturuldu`);
+    } catch (error) {
+      if (!error.stack.includes("WriteTask")) {
+        sendError(error, "ExifInsert");
+        if (existsSync(`${file.dir}/${file.base}_original`)) {
+          console.log("orjinal var");
+        }
         const { again } = await prompt.get({
           properties: {
             again: {
@@ -33,18 +45,6 @@ class ExifService extends ExifTool {
         await convert.ffmpegToJpeg(file);
         await this.insert(file, newExif);
       }
-    });
-    try {
-      if (!file) throw new Error("Dosya gönderilmedi");
-      if (!(file instanceof Object)) throw new Error("Gönderilen parametre bir obje değil");
-      const newExif = exif ?? (await this.setExif(file));
-      await ConvertService.organizer(file);
-      log.info('EXIF Yazılıyor...')
-      await this.write(`${file.dir}/${file.base}`, newExif, ["-charset", "filename=utf8", "-fast", "-a"]);
-      await this.fileMoves(file)
-      log.success(`Yeni ${file.base} dosyası başarıyla oluşturuldu`)
-    } catch (error) {
-      if (!error.stack.includes("WriteTask")) sendError(error, "ExifInsert");
     }
   }
 
@@ -83,25 +83,26 @@ class ExifService extends ExifTool {
     }
   }
 
-  async fileMoves({dir, base, name, ext, destFolder}){
+  async fileMoves({ dir, base, name, ext, destFolder }) {
     try {
+      console.log(base, 'geldi')
       if (!destFolder) {
         await fsp.mkdir(`${dir}/new`, { recursive: true });
         await fsp.rename(`${dir}/${base}`, `${dir}/new/${name}${ext}`);
         await fsp.mkdir(`${dir}/original`, { recursive: true });
         await fsp.rename(`${dir}/${base}_original`, `${dir}/original/${name}${ext}`);
-        return
-      }
-      await fsp.mkdir(`${destFolder}/new`, { recursive: true });
-      await fsp.rename(`${dir}/${base}`, `${destFolder}/new/${base}`);
-      await fsp.mkdir(`${dir}/original/${parse(destFolder).name}`, { recursive: true });
-      await fsp.rename(`${dir}/${base}_original`, `${dir}/original/${parse(destFolder).name}/${base}`);
-      if (existsSync(`${destFolder}/${base}`)) {
-        await fsp.unlink(`${destFolder}/${base}`);
-        log.info(`Hedef klasördeki ${base} dosyası silindi.`)
+      } else {
+        await fsp.mkdir(`${destFolder}/new`, { recursive: true });
+        await fsp.rename(`${dir}/${base}`, `${destFolder}/new/${base}`);
+        await fsp.mkdir(`${dir}/original/${parse(destFolder).name}`, { recursive: true });
+        await fsp.rename(`${dir}/${base}_original`, `${dir}/original/${parse(destFolder).name}/${base}`);
+        if (existsSync(`${destFolder}/${base}`)) {
+          await fsp.unlink(`${destFolder}/${base}`);
+          log.info(`Hedef klasördeki ${base} dosyası silindi.`);
+        }
       }
     } catch (error) {
-      sendError(error,'FileMoves')
+      sendError(error, "FileMoves");
     }
   }
   helpers = {
